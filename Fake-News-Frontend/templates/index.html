@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="description" content="TruthLens — AI-powered fake news detector. Analyze any article or text instantly."/>
+<title>TruthLens — Fake News Detector</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='38' cy='38' r='28' fill='none' stroke='%231d4ed8' stroke-width='7'/%3E%3Ccircle cx='38' cy='38' r='21' fill='%23eff6ff'/%3E%3Cpolyline points='26,38 34,47 52,28' fill='none' stroke='%231d4ed8' stroke-width='7' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cline x1='60' y1='60' x2='80' y2='80' stroke='%231d4ed8' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet"/>
+<!-- Set theme before render to avoid flash -->
+<script>
+(function(){
+  const t=localStorage.getItem('tl_theme')||'light';
+  document.documentElement.setAttribute('data-theme',t);
+  // Session expiry check: 7 days
+  const sess=localStorage.getItem('tl_session_time');
+  if(sess && Date.now()-parseInt(sess) > 7*24*60*60*1000){
+    localStorage.removeItem('tl_user');
+    localStorage.removeItem('tl_session_time');
+  }
+})();
+</script>
+<style>
+/* ── TOKENS ── */
+:root{--bg:#f0f6ff;--surface:#ffffff;--surface2:#e8f0fe;--border:rgba(37,99,235,0.12);--accent:#1d4ed8;--accent2:#3b82f6;--real:#16a34a;--fake:#dc2626;--warn:#d97706;--text:#0f172a;--muted:#64748b;--radius:14px;--shadow:0 8px 32px rgba(29,78,216,0.10)}
+[data-theme="dark"]{--bg:#0d1a2e;--surface:#112240;--surface2:#1a2f50;--border:rgba(59,130,246,0.15);--accent:#3b82f6;--accent2:#60a5fa;--text:#e2e8f0;--muted:#94a3b8;--shadow:0 8px 32px rgba(0,0,0,0.4)}
+/* ── RESET ── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .3s,color .3s;overflow-x:hidden}
+/* ── TOAST ── */
+#toast-container{position:fixed;top:20px;right:20px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:340px}
+.toast{padding:13px 18px;border-radius:12px;color:#fff;font-size:13px;font-weight:500;animation:slideIn .3s ease;max-width:340px;box-shadow:0 4px 20px rgba(0,0,0,.15);display:flex;align-items:center;gap:10px}
+.toast.success{background:#16a34a}.toast.error{background:#dc2626}.toast.info{background:#1d4ed8}.toast.warn{background:#d97706}
+@keyframes slideIn{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+/* ── PAGES ── */
+.page{display:none;min-height:100vh}
+.page.active{display:flex;flex-direction:column;animation:fadeIn .35s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+/* ── NAVBAR ── */
+nav{display:flex;align-items:center;justify-content:space-between;padding:14px 40px;border-bottom:1px solid var(--border);background:rgba(255,255,255,0.92);backdrop-filter:blur(20px);position:sticky;top:0;z-index:200}
+[data-theme="dark"] nav{background:rgba(17,34,64,0.92)}
+.nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer;text-decoration:none}
+.nav-logo svg{flex-shrink:0}
+.nav-logo-truth{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;color:var(--text)}
+.nav-logo-lens{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;color:var(--accent)}
+.nav-logo-tag{font-size:9px;font-weight:600;letter-spacing:2.5px;color:var(--muted);text-transform:uppercase;margin-top:1px}
+.nav-logo-words{display:flex;flex-direction:column;gap:0}
+.nav-actions{display:flex;align-items:center;gap:10px}
+.nav-user{font-size:13px;color:var(--muted);font-weight:500;display:flex;align-items:center;gap:6px}
+.nav-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff}
+/* hamburger for mobile */
+.hamburger{display:none;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:8px;cursor:pointer;color:var(--muted)}
+/* ── BUTTONS ── */
+.btn{padding:9px 20px;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+.btn-primary:hover:not(:disabled){opacity:.9;transform:translateY(-1px);box-shadow:0 4px 20px rgba(29,78,216,.3)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover:not(:disabled){color:var(--text);border-color:var(--accent)}
+.btn-sm{padding:7px 14px;font-size:13px;border-radius:8px}
+.btn-danger{background:rgba(239,68,68,.12);color:var(--fake);border:1px solid rgba(239,68,68,.25)}
+.btn-danger:hover:not(:disabled){background:rgba(239,68,68,.22)}
+.icon-btn{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:9px;cursor:pointer;color:var(--muted);transition:all .2s;display:flex;align-items:center;justify-content:center}
+.icon-btn:hover{color:var(--text);border-color:var(--accent)}
+.lang-select{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:7px 10px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;outline:none;transition:border-color .2s}
+.lang-select:hover{border-color:var(--accent)}
+.lang-select:focus{border-color:var(--accent)}
+/* ── LANDING ── */
+#page-landing{background:var(--bg)}
+.landing-hero{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;padding:80px 60px;max-width:1200px;margin:0 auto;width:100%}
+.hero-left h1{font-family:'Space Grotesk',sans-serif;font-size:clamp(2rem,4vw,3.4rem);font-weight:700;line-height:1.15;margin-bottom:20px}
+.hero-left h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-left p{font-size:17px;color:var(--muted);line-height:1.7;margin-bottom:36px;max-width:480px}
+.hero-badges{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:36px}
+.badge{padding:5px 14px;border-radius:30px;font-size:12px;font-weight:600;border:1px solid var(--border);color:var(--muted);background:var(--surface)}
+.hero-cta{display:flex;gap:14px;flex-wrap:wrap}
+.hero-right{display:flex;justify-content:center;align-items:center}
+.hero-visual{width:100%;max-width:420px;background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:28px;box-shadow:var(--shadow)}
+.visual-header{display:flex;align-items:center;gap:10px;margin-bottom:20px}
+.visual-dots span{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:5px}
+.dot-r{background:#ef4444}.dot-y{background:#f59e0b}.dot-g{background:#22c55e}
+.visual-title{font-size:13px;font-weight:600;color:var(--muted)}
+.visual-input{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+.visual-result{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:14px}
+.visual-result-label{font-size:11px;color:var(--real);font-weight:700;letter-spacing:.5px;margin-bottom:8px}
+.visual-bars{display:flex;flex-direction:column;gap:6px}
+.vbar-row{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--muted)}
+.vbar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+.vbar-fill{height:100%;border-radius:3px}
+.vbar-fill.real{background:var(--real)}.vbar-fill.fake{background:var(--fake)}
+.features-section{padding:60px;max-width:1200px;margin:0 auto;width:100%}
+.features-section h2{font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:700;margin-bottom:36px;text-align:center}
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.feature-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;transition:border-color .2s,transform .2s}
+.feature-card:hover{border-color:var(--accent);transform:translateY(-3px)}
+.feature-icon{font-size:26px;margin-bottom:12px}
+.feature-card h3{font-size:15px;font-weight:700;margin-bottom:8px}
+.feature-card p{font-size:13px;color:var(--muted);line-height:1.6}
+/* ── STATS BANNER ── */
+.stats-banner{background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:28px 60px;display:flex;justify-content:center;gap:80px}
+.stat-item{text-align:center}
+.stat-num{font-family:'Space Grotesk',sans-serif;font-size:32px;font-weight:700;color:var(--accent)}
+.stat-label{font-size:13px;color:var(--muted);margin-top:4px}
+/* ── AUTH ── */
+.auth-wrap{flex:1;display:flex;align-items:center;justify-content:center;padding:40px}
+.auth-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:40px;width:100%;max-width:420px;box-shadow:var(--shadow)}
+.auth-card h2{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;margin-bottom:6px}
+.auth-card p{color:var(--muted);font-size:14px;margin-bottom:28px}
+.form-group{margin-bottom:18px;position:relative}
+.form-group label{display:block;font-size:13px;font-weight:600;margin-bottom:7px;color:var(--text)}
+.form-group input{width:100%;padding:12px 42px 12px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;outline:none;transition:border-color .2s}
+.form-group input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.08)}
+.form-group input.error-input{border-color:var(--fake)}
+.pw-toggle{position:absolute;right:12px;bottom:12px;cursor:pointer;color:var(--muted);background:none;border:none;padding:0;display:flex;align-items:center}
+.pw-toggle:hover{color:var(--text)}
+.form-hint{font-size:12px;color:var(--muted);margin-top:5px}
+.form-error{font-size:12px;color:var(--fake);margin-top:5px;display:none}
+.auth-footer{text-align:center;margin-top:20px;font-size:14px;color:var(--muted)}
+.auth-footer a{color:var(--accent);text-decoration:none;font-weight:600;cursor:pointer}
+.auth-divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:var(--muted);font-size:12px}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--border)}
+/* ── MAIN APP ── */
+#page-app{flex-direction:column}
+.app-layout{display:grid;grid-template-columns:260px 1fr;flex:1;min-height:0;overflow:hidden}
+/* ── SIDEBAR ── */
+.sidebar{background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;height:calc(100vh - 61px);position:sticky;top:61px}
+.sidebar-section-label{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:1px;text-transform:uppercase;padding:12px 12px 4px}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;color:var(--muted);transition:all .18s;border:1px solid transparent;position:relative}
+.sidebar-item:hover{background:var(--surface2);color:var(--text)}
+.sidebar-item.active{background:rgba(29,78,216,.08);color:var(--accent);border-color:rgba(29,78,216,.18)}
+.sidebar-item .si-icon{font-size:16px;width:20px;text-align:center}
+.sidebar-badge{margin-left:auto;background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;min-width:20px;text-align:center}
+.sidebar-stats{margin-top:auto;background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px}
+.ss-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.ss-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:8px}
+.ss-val{font-weight:700;font-size:16px}
+.ss-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:2px}
+.ss-bar-fill{height:100%;border-radius:2px;transition:width .6s ease}
+/* ── MAIN CONTENT ── */
+.main-content{flex:1;overflow-y:auto;padding:32px;display:flex;flex-direction:column;gap:22px}
+/* ── TAB PANELS ── */
+.tab-panel{display:none}
+.tab-panel.active{display:block;animation:fadeIn .3s ease}
+/* ── PANEL HEADER ── */
+.panel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px}
+.panel-title{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700}
+.panel-subtitle{color:var(--muted);font-size:13px;margin-top:3px}
+/* ── ANALYZE CARD ── */
+.analyze-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.input-mode-tabs{display:flex;gap:8px;margin-bottom:18px}
+.mode-tab{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .2s}
+.mode-tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;padding:16px;resize:vertical;min-height:140px;outline:none;font-family:inherit;transition:border-color .2s;line-height:1.6}
+textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.08)}
+.url-input-wrap{position:relative}
+.url-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:14px;padding:12px 42px 12px 16px;outline:none;transition:border-color .2s}
+.url-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(29,78,216,.08)}
+.url-input.error-input{border-color:var(--fake)}
+.url-clear{position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);background:none;border:none;display:none;align-items:center}
+.char-count{font-size:12px;color:var(--muted);text-align:right;margin-top:6px;display:flex;justify-content:space-between;align-items:center}
+.char-warn{color:var(--warn);font-size:12px}
+.analyze-actions{display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap}
+.voice-btn{display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface2);color:var(--muted);transition:all .2s}
+.voice-btn:hover{border-color:var(--accent);color:var(--accent)}
+.voice-btn.listening{background:rgba(239,68,68,.1);border-color:var(--fake);color:var(--fake);animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+/* ── SKELETON LOADER ── */
+.skeleton{background:var(--surface2);border-radius:8px;animation:shimmer 1.5s infinite}
+@keyframes shimmer{0%{opacity:.6}50%{opacity:1}100%{opacity:.6}}
+.skeleton-result{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-top:4px}
+.skeleton-line{height:12px;border-radius:6px;margin-bottom:12px}
+.skeleton-line.wide{width:60%}.skeleton-line.medium{width:40%}.skeleton-line.short{width:25%}
+/* ── LOADER ── */
+.loader{display:none;align-items:center;gap:10px;color:var(--muted);font-size:14px;padding:16px 0}
+.spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* ── RESULT ── */
+.result-card{border-radius:var(--radius);padding:26px;border:1px solid;animation:fadeIn .4s ease}
+.result-card.real{background:rgba(34,197,94,.05);border-color:rgba(34,197,94,.25)}
+.result-card.fake{background:rgba(239,68,68,.05);border-color:rgba(239,68,68,.25)}
+.result-card.low-conf{border-style:dashed}
+.result-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px}
+.result-label{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700}
+.result-label.real{color:var(--real)}.result-label.fake{color:var(--fake)}
+.result-sub{font-size:13px;color:var(--muted);margin-top:4px}
+.confidence-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.confidence-pct{font-size:22px;font-weight:800}
+.confidence-text{font-size:11px;color:var(--muted);font-weight:500}
+.conf-bar{width:130px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:2px}
+.conf-bar-fill{height:100%;border-radius:3px;transition:width 1s ease}
+.conf-bar-fill.real{background:var(--real)}.conf-bar-fill.fake{background:var(--fake)}
+.low-conf-banner{background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.3);border-radius:8px;padding:10px 14px;font-size:13px;color:#92400e;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+[data-theme="dark"] .low-conf-banner{color:#fcd34d}
+.result-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.result-metric{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px}
+.rm-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
+.rm-value{font-size:14px;font-weight:600}
+.keywords-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.keyword{background:rgba(29,78,216,.08);color:var(--accent);padding:3px 10px;border-radius:16px;font-size:12px;font-weight:600;border:1px solid rgba(29,78,216,.15);cursor:pointer;transition:background .15s}
+.keyword:hover{background:rgba(29,78,216,.16)}
+.highlighted-text{line-height:1.9;font-size:14px;background:var(--surface);border-radius:10px;padding:14px;border:1px solid var(--border);max-height:180px;overflow-y:auto}
+.fake-word{background:rgba(239,68,68,.18);color:var(--fake);border-radius:3px;padding:1px 4px;font-weight:600}
+.real-word{background:rgba(34,197,94,.14);color:var(--real);border-radius:3px;padding:1px 4px;font-weight:600}
+.result-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+/* ── HISTORY ── */
+.history-controls{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center}
+.search-wrap{position:relative;flex:1;min-width:180px}
+.search-wrap input{width:100%;padding:9px 14px 9px 36px;background:var(--surface);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;outline:none;transition:border-color .2s}
+.search-wrap input:focus{border-color:var(--accent)}
+.search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted)}
+.filter-tabs{display:flex;gap:5px}
+.ftab{padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted);transition:all .2s}
+.ftab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.history-list{display:flex;flex-direction:column;gap:12px}
+.history-item{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;transition:border-color .2s,box-shadow .2s;cursor:default}
+.history-item:hover{border-color:rgba(29,78,216,.3);box-shadow:0 2px 12px rgba(29,78,216,.06)}
+.hi-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.hi-result{font-size:12px;font-weight:700;padding:3px 10px;border-radius:16px}
+.hi-result.real{background:rgba(34,197,94,.12);color:var(--real)}
+.hi-result.fake{background:rgba(239,68,68,.12);color:var(--fake)}
+.hi-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hi-time{font-size:11px;color:var(--muted)}
+.hi-conf{font-size:11px;font-weight:600;color:var(--muted)}
+.hi-text{font-size:13px;color:var(--muted);line-height:1.6;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.hi-footer{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.hi-keywords{display:flex;gap:5px;flex-wrap:wrap}
+.hi-kw{background:var(--surface2);color:var(--muted);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-icon{font-size:44px;margin-bottom:16px}
+.pagination{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:20px}
+.page-btn{padding:7px 13px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted);transition:all .2s}
+.page-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.page-btn:hover:not(.active){border-color:var(--accent);color:var(--accent)}
+/* ── PROFILE ── */
+.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.profile-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:26px}
+.profile-card h3{font-size:15px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.profile-avatar-lg{width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#fff;margin-bottom:14px}
+.profile-name{font-size:20px;font-weight:700;margin-bottom:3px}
+.profile-email{color:var(--muted);font-size:13px}
+.stat-pill{display:inline-flex;align-items:center;gap:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:13px;font-weight:600;margin-top:12px;margin-right:8px}
+.accuracy-ring{display:flex;align-items:center;gap:14px;margin-top:16px;padding:14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)}
+.ring-val{font-size:26px;font-weight:800;color:var(--accent)}
+.ring-label{font-size:12px;color:var(--muted)}
+/* ── ABOUT TAB ── */
+.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.about-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px}
+.about-card h3{font-size:16px;font-weight:700;margin-bottom:12px;color:var(--accent)}
+.about-card p{font-size:14px;color:var(--muted);line-height:1.7}
+.about-card ul{list-style:none;display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.about-card ul li{font-size:14px;color:var(--muted);display:flex;align-items:flex-start;gap:8px;line-height:1.5}
+.about-card ul li::before{content:'→';color:var(--accent);font-weight:700;flex-shrink:0}
+.how-step{display:flex;gap:16px;align-items:flex-start;padding:16px;background:var(--surface2);border-radius:10px;margin-bottom:10px}
+.step-num{width:32px;height:32px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.step-content h4{font-size:14px;font-weight:700;margin-bottom:4px}
+.step-content p{font-size:13px;color:var(--muted);line-height:1.5}
+/* ── MODALS ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:20px}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:30px;max-width:460px;width:100%;box-shadow:var(--shadow);animation:fadeIn .3s ease}
+.modal h3{font-size:18px;font-weight:700;margin-bottom:8px}
+.modal p{color:var(--muted);font-size:14px;margin-bottom:20px}
+.share-link{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-size:12px;color:var(--accent);word-break:break-all;margin-bottom:14px;font-family:monospace}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+/* ── MOBILE MENU ── */
+.mobile-nav{display:none;position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.5);backdrop-filter:blur(4px)}
+.mobile-nav.open{display:block}
+.mobile-nav-panel{position:fixed;left:0;top:0;bottom:0;width:260px;background:var(--surface);border-right:1px solid var(--border);padding:20px 14px;display:flex;flex-direction:column;gap:4px;overflow-y:auto;animation:slideInLeft .25s ease}
+@keyframes slideInLeft{from{transform:translateX(-100%)}to{transform:translateX(0)}}
+.mobile-nav-close{margin-bottom:16px;display:flex;justify-content:flex-end}
+/* ── RESPONSIVE ── */
+@media(max-width:900px){
+  .landing-hero{grid-template-columns:1fr;padding:50px 24px;gap:40px}
+  .hero-right{display:none}
+  .features-section{padding:40px 24px}
+  .stats-banner{padding:24px;gap:40px}
+  .about-grid{grid-template-columns:1fr}
+  .profile-grid{grid-template-columns:1fr}
+}
+@media(max-width:768px){
+  nav{padding:12px 20px}
+  .app-layout{grid-template-columns:1fr}
+  .sidebar{display:none}
+  .hamburger{display:flex}
+  .main-content{padding:18px}
+  .result-grid{grid-template-columns:1fr}
+  .history-controls{flex-direction:column;align-items:stretch}
+  .filter-tabs{justify-content:center}
+  .nav-user span.nav-username{display:none}
+}
+@media(max-width:480px){
+  .stats-banner{flex-direction:column;gap:24px;padding:24px}
+  .hero-cta{flex-direction:column}
+  .hero-cta .btn{width:100%;justify-content:center}
+}
+</style>
+</head>
+<body>
+<div id="toast-container"></div>
+
+<!-- SHARE MODAL -->
+<div class="modal-overlay" id="shareModal">
+  <div class="modal">
+    <h3>📤 Share Result</h3>
+    <p>Copy this link to share your analysis result with others.</p>
+    <div class="share-link" id="shareLink"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeShare()">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="copyShareLink()">📋 Copy Link</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGOUT MODAL -->
+<div class="modal-overlay" id="logoutModal">
+  <div class="modal">
+    <h3>Log Out</h3>
+    <p>Are you sure you want to log out of TruthLens?</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="document.getElementById('logoutModal').classList.remove('open')">No, stay</button>
+      <button type="button" class="btn btn-danger" onclick="confirmLogout()">Yes, log out</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE ACCOUNT MODAL -->
+<div class="modal-overlay" id="deleteAccountModal">
+  <div class="modal">
+    <h3>⚠️ Delete Account</h3>
+    <p>This will permanently delete your account and all your analysis history. This action cannot be undone. Enter your password to confirm.</p>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="da-password" placeholder="Your password" onkeydown="if(event.key==='Enter')confirmDeleteAccount()"/>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" onclick="closeDeleteAccountModal()">Cancel</button>
+      <button type="button" class="btn btn-danger" id="da-confirm-btn" onclick="confirmDeleteAccount()">Delete My Account</button>
+    </div>
+  </div>
+</div>
+
+<!-- MOBILE NAV -->
+<div class="mobile-nav" id="mobileNav" onclick="closeMobileNav(event)">
+  <div class="mobile-nav-panel">
+    <div class="mobile-nav-close"><button type="button" class="icon-btn" onclick="closeMobileNav()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
+    <div class="sidebar-section-label">Navigation</div>
+    <div class="sidebar-item active" id="mob-analyzer" onclick="mobileSwitchTab('analyzer')">🔍 Analyzer</div>
+    <div class="sidebar-item" id="mob-history" onclick="mobileSwitchTab('history')">📋 History <span class="sidebar-badge" id="mob-hist-badge" style="display:none">0</span></div>
+    <div class="sidebar-item" id="mob-profile" onclick="mobileSwitchTab('profile')">👤 Profile</div>
+    <div class="sidebar-item" id="mob-about" onclick="mobileSwitchTab('about')">ℹ️ About</div>
+    <div style="margin-top:auto;padding-top:20px">
+      <button type="button" class="btn btn-danger" style="width:100%" onclick="doLogout()" data-i18n="logout">Log out</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: LANDING ═══ -->
+<div class="page active" id="page-landing">
+  <nav>
+    <span class="nav-logo">
+      <svg width="34" height="34" viewBox="0 0 90 90" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="36" cy="36" r="26" fill="none" stroke="#1d4ed8" stroke-width="6"/>
+        <circle cx="36" cy="36" r="19" fill="#eff6ff"/>
+        <line x1="18" y1="29" x2="54" y2="29" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="18" y1="36" x2="54" y2="36" stroke="#bfdbfe" stroke-width="2"/>
+        <line x1="18" y1="43" x2="54" y2="43" stroke="#bfdbfe" stroke-width="2"/>
+        <polyline points="24,36 33,46 50,24" fill="none" stroke="#1d4ed8" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <line x1="57" y1="57" x2="76" y2="76" stroke="#1d4ed8" stroke-width="7" stroke-linecap="round"/>
+      </svg>
+      <div class="nav-logo-words">
+        <div><span class="nav-logo-truth">Truth</span><span class="nav-logo-lens">Lens</span></div>
+        <div class="nav-logo-tag" data-i18n="tagline">See through the noise</div>
+      </div>
+    </span>
+    <div class="nav-actions">
+      <button type="button" class="icon-btn" onclick="toggleTheme()" title="Toggle theme" id="theme-btn-landing"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+      <select class="lang-select" onchange="setLang(this.value)" title="Select language">
+        <option value="en">🌐 EN</option>
+        <option value="hi">हि HI</option>
+        <option value="es">ES</option>
+        <option value="fr">FR</option>
+        <option value="de">DE</option>
+        <option value="ar">AR</option>
+      </select>
+      <button type="button" class="btn btn-ghost" onclick="showPage('page-login')" data-i18n="login">Log in</button>
+      <button type="button" class="btn btn-primary" onclick="showPage('page-register')" data-i18n="getStarted">Get Started →</button>
+    </div>
+  </nav>
+  <div class="landing-hero">
+    <div class="hero-left">
+      <div class="hero-badges">
+        <span class="badge">🤖 AI-Powered</span>
+        <span class="badge">⚡ Real-time</span>
+        <span class="badge">🔒 Secure</span>
+        <span class="badge">📊 Explainable</span>
+      </div>
+      <h1 data-i18n-html="heroTitle">Don't Share <span>Fake News.</span> Detect It First.</h1>
+      <p>TruthLens uses machine learning to analyze news articles and social media posts — giving you a verdict with confidence scores, keyword extraction, and highlighted suspicious phrases.</p>
+      <div class="hero-cta">
+        <button type="button" class="btn btn-primary" style="padding:14px 32px;font-size:16px" onclick="showPage('page-register')">Try It Free →</button>
+        <button type="button" class="btn btn-ghost" style="padding:14px 32px;font-size:16px" onclick="showPage('page-login')" data-i18n="signIn">Sign In</button>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="hero-visual">
+        <div class="visual-header">
+          <div class="visual-dots"><span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span></div>
+          <span class="visual-title">Live Analysis</span>
+        </div>
+        <div class="visual-input">"Scientists confirm new breakthrough in renewable energy storage, increasing capacity by 400%..."</div>
+        <div class="visual-result">
+          <div class="visual-result-label">✅ REAL NEWS — 94.2% Confidence</div>
+          <div class="visual-bars">
+            <div class="vbar-row"><span style="width:38px">Real</span><div class="vbar"><div class="vbar-fill real" style="width:94%"></div></div><span>94%</span></div>
+            <div class="vbar-row"><span style="width:38px">Fake</span><div class="vbar"><div class="vbar-fill fake" style="width:6%"></div></div><span>6%</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="stats-banner">
+    <div class="stat-item"><div class="stat-num">98.2%</div><div class="stat-label">Model Accuracy</div></div>
+    <div class="stat-item"><div class="stat-num">&lt;1s</div><div class="stat-label">Analysis Time</div></div>
+    <div class="stat-item"><div class="stat-num">2</div><div class="stat-label">Input Methods</div></div>
+    <div class="stat-item"><div class="stat-num">Free</div><div class="stat-label">To Use</div></div>
+  </div>
+  <div class="features-section">
+    <h2>Everything You Need to Fight Misinformation</h2>
+    <div class="features-grid">
+      <div class="feature-card"><div class="feature-icon">🎯</div><h3>Confidence Score</h3><p>See exactly how confident the model is — with a low-confidence warning for borderline cases.</p></div>
+      <div class="feature-card"><div class="feature-icon">🔍</div><h3>Word Highlighting</h3><p>Suspicious and credible phrases are highlighted directly in your text.</p></div>
+      <div class="feature-card"><div class="feature-icon">😊</div><h3>Sentiment Analysis</h3><p>Understand the emotional tone — positive, negative, or neutral.</p></div>
+      <div class="feature-card"><div class="feature-icon">🏷️</div><h3>Keyword Extraction</h3><p>The most important terms surfaced instantly — click any to search history.</p></div>
+      <div class="feature-card"><div class="feature-icon">🔗</div><h3>URL Analyzer</h3><p>Paste any article link and we'll fetch and analyze it automatically.</p></div>
+      <div class="feature-card"><div class="feature-icon">🎤</div><h3>Voice Input</h3><p>Speak your text using the microphone — no typing needed.</p></div>
+      <div class="feature-card"><div class="feature-icon">📊</div><h3>History &amp; Export</h3><p>Full paginated history with search, filter, and CSV export.</p></div>
+      <div class="feature-card"><div class="feature-icon">📤</div><h3>Share Results</h3><p>Share your analysis via a copyable link in one click.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: REGISTER ═══ -->
+<div class="page" id="page-register">
+  <nav>
+    <span class="nav-logo" onclick="showPage('page-landing')" style="cursor:pointer">
+      <svg width="34" height="34" viewBox="0 0 90 90" fill="none"><circle cx="36" cy="36" r="26" fill="none" stroke="#1d4ed8" stroke-width="6"/><circle cx="36" cy="36" r="19" fill="#eff6ff"/><line x1="18" y1="29" x2="54" y2="29" stroke="#bfdbfe" stroke-width="2"/><line x1="18" y1="36" x2="54" y2="36" stroke="#bfdbfe" stroke-width="2"/><line x1="18" y1="43" x2="54" y2="43" stroke="#bfdbfe" stroke-width="2"/><polyline points="24,36 33,46 50,24" fill="none" stroke="#1d4ed8" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="57" y1="57" x2="76" y2="76" stroke="#1d4ed8" stroke-width="7" stroke-linecap="round"/></svg>
+      <div class="nav-logo-words"><div><span class="nav-logo-truth">Truth</span><span class="nav-logo-lens">Lens</span></div><div class="nav-logo-tag" data-i18n="tagline">See through the noise</div></div>
+    </span>
+    <div class="nav-actions">
+      <button type="button" class="icon-btn" onclick="toggleTheme()" title="Toggle theme" id="theme-btn-reg"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+      <select class="lang-select" onchange="setLang(this.value)" id="lang-sel-2" title="Select language">
+        <option value="en">🌐 EN</option>
+        <option value="hi">हि HI</option>
+        <option value="es">ES</option>
+        <option value="fr">FR</option>
+        <option value="de">DE</option>
+        <option value="ar">AR</option>
+      </select>
+    </div>
+  </nav>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <h2 data-i18n="createAccount">Create Account</h2>
+      <p>Join TruthLens — free forever, no credit card needed.</p>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="reg-username" placeholder="At least 3 characters" oninput="validateRegForm()" autocomplete="username"/>
+        <div class="form-error" id="reg-user-err">Username must be at least 3 characters</div>
+      </div>
+      <div class="form-group">
+        <label>Email <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+        <input type="email" id="reg-email" placeholder="you@example.com" autocomplete="email"/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="reg-password" placeholder="At least 6 characters" oninput="validateRegForm()" autocomplete="new-password"/>
+        <button type="button" class="pw-toggle" onclick="togglePw('reg-password',this)" tabindex="-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <div class="form-hint" id="reg-strength"></div>
+        <div class="form-error" id="reg-pw-err">Password must be at least 6 characters</div>
+      </div>
+      <div class="form-group">
+        <label>Confirm Password</label>
+        <input type="password" id="reg-confirm" placeholder="Repeat your password" oninput="validateRegForm()" autocomplete="new-password"/>
+        <button type="button" class="pw-toggle" onclick="togglePw('reg-confirm',this)" tabindex="-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+        <div class="form-error" id="reg-match-err">Passwords do not match</div>
+      </div>
+      <button type="button" class="btn btn-primary" style="width:100%;padding:13px;justify-content:center" id="reg-btn" onclick="doRegister()" disabled data-i18n="createAccount">Create Account</button>
+      <div class="auth-footer">Already have an account? <a onclick="showPage('page-login')">Sign in</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: LOGIN ═══ -->
+<div class="page" id="page-login">
+  <nav>
+    <span class="nav-logo" onclick="showPage('page-landing')" style="cursor:pointer">
+      <svg width="34" height="34" viewBox="0 0 90 90" fill="none"><circle cx="36" cy="36" r="26" fill="none" stroke="#1d4ed8" stroke-width="6"/><circle cx="36" cy="36" r="19" fill="#eff6ff"/><line x1="18" y1="29" x2="54" y2="29" stroke="#bfdbfe" stroke-width="2"/><line x1="18" y1="36" x2="54" y2="36" stroke="#bfdbfe" stroke-width="2"/><line x1="18" y1="43" x2="54" y2="43" stroke="#bfdbfe" stroke-width="2"/><polyline points="24,36 33,46 50,24" fill="none" stroke="#1d4ed8" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="57" y1="57" x2="76" y2="76" stroke="#1d4ed8" stroke-width="7" stroke-linecap="round"/></svg>
+      <div class="nav-logo-words"><div><span class="nav-logo-truth">Truth</span><span class="nav-logo-lens">Lens</span></div><div class="nav-logo-tag" data-i18n="tagline">See through the noise</div></div>
+    </span>
+    <div class="nav-actions">
+      <button type="button" class="icon-btn" onclick="toggleTheme()" title="Toggle theme" id="theme-btn-login"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+      <select class="lang-select" onchange="setLang(this.value)" id="lang-sel-3" title="Select language">
+        <option value="en">🌐 EN</option>
+        <option value="hi">हि HI</option>
+        <option value="es">ES</option>
+        <option value="fr">FR</option>
+        <option value="de">DE</option>
+        <option value="ar">AR</option>
+      </select>
+    </div>
+  </nav>
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <h2 data-i18n="welcomeBack">Welcome Back</h2>
+      <p>Sign in to your TruthLens account.</p>
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="Your username" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="username"/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="Your password" onkeydown="if(event.key==='Enter')doLogin()" autocomplete="current-password"/>
+        <button type="button" class="pw-toggle" onclick="togglePw('login-password',this)" tabindex="-1">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <button type="button" class="btn btn-primary" style="width:100%;padding:13px;justify-content:center" id="login-btn" onclick="doLogin()" data-i18n="signIn">Sign In</button>
+      <div class="auth-footer">No account? <a onclick="showPage('page-register')">Create one free</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: MAIN APP ═══ -->
+<div class="page" id="page-app">
+  <nav>
+    <div style="display:flex;align-items:center;gap:12px">
+      <button type="button" class="hamburger" onclick="openMobileNav()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <span class="nav-logo">
+        <svg width="34" height="34" viewBox="0 0 90 90" fill="none"><circle cx="36" cy="36" r="26" fill="none" stroke="#1d4ed8" stroke-width="6"/><circle cx="36" cy="36" r="19" fill="#eff6ff"/><line x1="18" y1="29" x2="54" y2="29" stroke="#bfdbfe" stroke-width="2"/><line x1="18" y1="36" x2="54" y2="36" stroke="#bfdbfe" stroke-width="2"/><line x1="18" y1="43" x2="54" y2="43" stroke="#bfdbfe" stroke-width="2"/><polyline points="24,36 33,46 50,24" fill="none" stroke="#1d4ed8" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="57" y1="57" x2="76" y2="76" stroke="#1d4ed8" stroke-width="7" stroke-linecap="round"/></svg>
+        <div class="nav-logo-words"><div><span class="nav-logo-truth">Truth</span><span class="nav-logo-lens">Lens</span></div><div class="nav-logo-tag" data-i18n="tagline">See through the noise</div></div>
+      </span>
+    </div>
+    <div class="nav-actions">
+      <div class="nav-user">
+        <div class="nav-avatar" id="nav-avatar">?</div>
+        <span class="nav-username" id="nav-username"></span>
+      </div>
+      <button type="button" class="icon-btn" onclick="toggleTheme()" title="Toggle theme" id="theme-btn-app"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></button>
+      <select class="lang-select" onchange="setLang(this.value)" id="lang-sel-4" title="Select language">
+        <option value="en">🌐 EN</option>
+        <option value="hi">हि HI</option>
+        <option value="es">ES</option>
+        <option value="fr">FR</option>
+        <option value="de">DE</option>
+        <option value="ar">AR</option>
+      </select>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="doLogout()" data-i18n="logout">Log out</button>
+    </div>
+  </nav>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-section-label">Menu</div>
+      <div class="sidebar-item active" id="si-analyzer" onclick="switchTab('analyzer',this)"><span class="si-icon">🔍</span> <span data-i18n="analyzer">Analyzer</span></div>
+      <div class="sidebar-item" id="si-history" onclick="switchTab('history',this)"><span class="si-icon">📋</span> <span data-i18n="history">History</span> <span class="sidebar-badge" id="hist-badge" style="display:none">0</span></div>
+      <div class="sidebar-item" id="si-profile" onclick="switchTab('profile',this)"><span class="si-icon">👤</span> <span data-i18n="profile">Profile</span></div>
+      <div class="sidebar-item" id="si-about" onclick="switchTab('about',this)"><span class="si-icon">ℹ️</span> <span data-i18n="about">About</span></div>
+      <div class="sidebar-stats" id="sidebar-stats">
+        <div class="ss-title">Your Stats</div>
+        <div class="ss-row"><span>Total analyses</span><span class="ss-val" id="stat-total">0</span></div>
+        <div class="ss-bar"><div class="ss-bar-fill" id="stat-bar" style="width:0%;background:var(--accent)"></div></div>
+        <div class="ss-row" style="margin-top:10px"><span style="color:var(--real)">Real</span><span class="ss-val" id="stat-real" style="color:var(--real)">0</span></div>
+        <div class="ss-row"><span style="color:var(--fake)">Fake</span><span class="ss-val" id="stat-fake" style="color:var(--fake)">0</span></div>
+      </div>
+    </div>
+    <!-- Main -->
+    <div class="main-content">
+
+      <!-- ANALYZER -->
+      <div class="tab-panel active" id="tab-analyzer">
+        <div class="panel-header">
+          <div><div class="panel-title" data-i18n="analyzeText">Analyze Text</div><div class="panel-subtitle">Paste an article, URL, or use your voice. Press Ctrl+Enter to analyze.</div></div>
+        </div>
+        <div class="analyze-card">
+          <div class="input-mode-tabs">
+            <div class="mode-tab active" onclick="setInputMode('text',this)">📝 Text</div>
+            <div class="mode-tab" onclick="setInputMode('url',this)">🔗 URL</div>
+          </div>
+          <div id="text-input-area">
+            <textarea id="analyze-text" placeholder="Paste your news article or any text here... (minimum 10 characters)" oninput="updateCharCount()" onkeydown="if((event.ctrlKey||event.metaKey)&&event.key==='Enter')doAnalyze()"></textarea>
+            <div class="char-count">
+              <span class="char-warn" id="char-warn" style="display:none">⚠️ Very long text may reduce accuracy</span>
+              <span><span id="char-count">0</span> / 5000 chars</span>
+            </div>
+          </div>
+          <div id="url-input-area" style="display:none">
+            <div class="url-input-wrap">
+              <input class="url-input" type="url" id="analyze-url" placeholder="https://example.com/news-article" oninput="validateUrl()"/>
+              <button type="button" class="url-clear" id="url-clear-btn" onclick="clearUrl()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+            <div class="form-hint" style="margin-top:8px">Enter a full URL starting with https:// — we'll fetch and analyze it.</div>
+            <div class="form-error" id="url-error" style="display:block;margin-top:6px;visibility:hidden">Please enter a valid URL starting with http:// or https://</div>
+          </div>
+          <div class="analyze-actions">
+            <button type="button" class="btn btn-primary" style="padding:11px 26px" id="analyze-btn" onclick="doAnalyze()">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg data-i18n="analyze">
+              Analyze
+            </button>
+            <button type="button" class="voice-btn" id="voice-btn" onclick="toggleVoice()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              Voice Input
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="clearAnalyzer()">Clear</button>
+          </div>
+        </div>
+        <!-- Skeleton while loading -->
+        <div id="skeleton-loader" style="display:none">
+          <div class="skeleton-result">
+            <div class="skeleton skeleton-line wide" style="height:28px;margin-bottom:20px"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+              <div class="skeleton" style="height:80px;border-radius:10px"></div>
+              <div class="skeleton" style="height:80px;border-radius:10px"></div>
+            </div>
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+          </div>
+        </div>
+        <div id="result-area"></div>
+      </div>
+
+      <!-- HISTORY -->
+      <div class="tab-panel" id="tab-history">
+        <div class="panel-header">
+          <div><div class="panel-title" data-i18n="analysisHistory">Analysis History</div><div class="panel-subtitle">Your past analyses — search, filter, export, or delete.</div></div>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="exportHistory()" data-i18n="exportCsv">⬇ Export CSV</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="clearHistory()" data-i18n="clearAll">🗑 Clear All</button>
+          </div>
+        </div>
+        <div class="history-controls">
+          <div class="search-wrap">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input type="text" id="history-search" placeholder="Search your history..." oninput="filterHistory()"/>
+          </div>
+          <div class="filter-tabs">
+            <div class="ftab active" onclick="setHistoryFilter('all',this)">All</div>
+            <div class="ftab" onclick="setHistoryFilter('real',this)">✅ Real</div>
+            <div class="ftab" onclick="setHistoryFilter('fake',this)">❌ Fake</div>
+          </div>
+        </div>
+        <div class="history-list" id="history-list">
+          <div class="empty-state"><div class="empty-icon">📭</div><p data-i18n="noAnalyses">No analyses yet. Go analyze something!</p></div>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+
+      <!-- PROFILE -->
+      <div class="tab-panel" id="tab-profile">
+        <div class="panel-header"><div><div class="panel-title" data-i18n="profile">Profile</div><div class="panel-subtitle">Your account overview and settings.</div></div></div>
+        <div class="profile-grid">
+          <div class="profile-card">
+            <div class="profile-avatar-lg" id="profile-avatar"></div>
+            <div class="profile-name" id="profile-name"></div>
+            <div class="profile-email" id="profile-email-display"></div>
+            <div style="margin-top:14px">
+              <div class="stat-pill">📊 <span id="p-total">0</span> total</div>
+              <div class="stat-pill" style="color:var(--real)">✅ <span id="p-real">0</span> real</div>
+              <div class="stat-pill" style="color:var(--fake)">❌ <span id="p-fake">0</span> fake</div>
+            </div>
+            <div class="accuracy-ring" id="accuracy-ring" style="display:none">
+              <div class="ring-val" id="acc-val">—</div>
+              <div><div style="font-size:14px;font-weight:600">Fake Detection Rate</div><div class="ring-label">of analyzed content flagged as fake</div></div>
+            </div>
+          </div>
+          <div class="profile-card">
+            <h3>🔒 Change Password</h3>
+            <div class="form-group">
+              <label>Current Password</label>
+              <input type="password" id="cp-old" placeholder="Current password"/>
+              <button type="button" class="pw-toggle" onclick="togglePw('cp-old',this)" tabindex="-1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
+            <div class="form-group">
+              <label>New Password</label>
+              <input type="password" id="cp-new" placeholder="New password (min 6 chars)"/>
+              <button type="button" class="pw-toggle" onclick="togglePw('cp-new',this)" tabindex="-1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
+            <div class="form-group">
+              <label>Confirm New Password</label>
+              <input type="password" id="cp-confirm" placeholder="Repeat new password"/>
+              <button type="button" class="pw-toggle" onclick="togglePw('cp-confirm',this)" tabindex="-1"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="changePassword()">Update Password</button>
+          </div>
+          <div class="profile-card" style="grid-column:1/-1">
+            <h3>🎨 Appearance</h3>
+            <div class="profile-card" style="grid-column:1/-1;border-color:rgba(239,68,68,.25)">
+  <h3 style="color:var(--fake)">⚠️ Danger Zone</h3>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Permanently delete your account and all your analysis history. This cannot be undone.</p>
+  <button type="button" class="btn btn-danger" onclick="openDeleteAccountModal()">🗑 Delete Account</button>
+</div>
+            <p style="color:var(--muted);font-size:13px;margin-bottom:14px">Choose your preferred theme.</p>
+            <div style="display:flex;gap:10px">
+              <button type="button" class="btn btn-ghost" onclick="setTheme('light')">☀️ Light</button>
+              <button type="button" class="btn btn-ghost" onclick="setTheme('dark')">🌙 Dark</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ABOUT -->
+      <div class="tab-panel" id="tab-about">
+        <div class="panel-header"><div><div class="panel-title" data-i18n="aboutTitle">About TruthLens</div><div class="panel-subtitle">How it works and what powers it.</div></div></div>
+        <div class="about-grid">
+          <div class="about-card" style="grid-column:1/-1">
+            <h3>How It Works</h3>
+            <div class="how-step"><div class="step-num">1</div><div class="step-content"><h4>Input text or URL</h4><p>Paste any news article, social media post, or provide a URL. You can also use voice input.</p></div></div>
+            <div class="how-step"><div class="step-num">2</div><div class="step-content"><h4>ML model analyzes</h4><p>A trained machine learning model (TF-IDF + classifier) processes the text, extracting linguistic patterns associated with fake or real news.</p></div></div>
+            <div class="how-step"><div class="step-num">3</div><div class="step-content"><h4>Results explained</h4><p>You get a verdict, confidence score, sentiment analysis, keyword extraction, and highlighted suspicious phrases — not just a label.</p></div></div>
+          </div>
+          <div class="about-card">
+            <h3>What to trust</h3>
+            <ul>
+              <li>High confidence (85%+) results are generally reliable</li>
+              <li>Low confidence (below 65%) means the model is uncertain — treat with caution</li>
+              <li>Always cross-check with trusted news sources</li>
+              <li>The model may not catch sophisticated misinformation</li>
+            </ul>
+          </div>
+          <div class="about-card">
+            <h3>Tech stack</h3>
+            <ul>
+              <li>Frontend: Vanilla HTML, CSS, JavaScript</li>
+              <li>Backend: Python Flask REST API</li>
+              <li>ML: scikit-learn (TF-IDF + classifier)</li>
+              <li>Database: SQLite via Python</li>
+              <li>Auth: SHA-256 password hashing</li>
+            </ul>
+          </div>
+          <div class="about-card" style="grid-column:1/-1">
+            <h3>Limitations</h3>
+            <p>TruthLens is a demonstration project. The ML model was trained on a specific dataset and may not generalize perfectly to all types of content. It works best on English-language news articles. Do not use this as the sole basis for sharing or not sharing content — always apply critical thinking and consult multiple sources.</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let currentUser=null,historyData=[],currentFilter='all',inputMode='text';
+let recognition=null,isListening=false,lastResult=null;
+let histPage=1,histPerPage=10,isAnalyzing=false,currentLang='en';
+
+// ── INIT ──
+(function(){
+  updateThemeIcon();
+  var saved=localStorage.getItem('tl_user');
+  if(saved){currentUser=JSON.parse(saved);enterApp();}
+  var lang=localStorage.getItem('tl_lang')||'en';
+  currentLang=lang;
+  document.documentElement.setAttribute('dir',lang==='ar'?'rtl':'ltr');
+})();
+
+// ── PAGES ──
+function showPage(id){
+  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0,0);
+}
+
+function switchTab(name,el){
+  document.querySelectorAll('.tab-panel').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.sidebar-item').forEach(function(s){s.classList.remove('active');});
+  document.getElementById('tab-'+name).classList.add('active');
+  if(el)el.classList.add('active');
+  if(name==='history')loadHistory();
+  if(name==='profile')loadProfile();
+}
+
+function mobileSwitchTab(name){
+  closeMobileNav();
+  switchTab(name,document.getElementById('si-'+name));
+  document.querySelectorAll('.mobile-nav-panel .sidebar-item').forEach(function(s){s.classList.remove('active');});
+  var mob=document.getElementById('mob-'+name);
+  if(mob)mob.classList.add('active');
+}
+
+function openMobileNav(){document.getElementById('mobileNav').classList.add('open');document.body.style.overflow='hidden';}
+function closeMobileNav(e){
+  if(e&&e.target!==document.getElementById('mobileNav'))return;
+  document.getElementById('mobileNav').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+// ── THEME ──
+function toggleTheme(){var cur=document.documentElement.getAttribute('data-theme');setTheme(cur==='light'?'dark':'light');}
+function setTheme(t){document.documentElement.setAttribute('data-theme',t);localStorage.setItem('tl_theme',t);updateThemeIcon();}
+function updateThemeIcon(){
+  var dark=document.documentElement.getAttribute('data-theme')==='dark';
+  var moon='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+  var sun='<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+  document.querySelectorAll('.icon-btn[title="Toggle theme"]').forEach(function(b){b.innerHTML=dark?sun:moon;});
+}
+
+// ── TOAST ──
+function toast(msg,type,duration){
+  type=type||'info';duration=duration||3500;
+  var icons={success:'✅',error:'❌',info:'ℹ️',warn:'⚠️'};
+  var el=document.createElement('div');
+  el.className='toast '+type;
+  el.innerHTML='<span>'+(icons[type]||'')+'</span><span>'+msg+'</span>';
+  document.getElementById('toast-container').appendChild(el);
+  setTimeout(function(){el.style.opacity='0';el.style.transform='translateX(110%)';el.style.transition='all .3s';setTimeout(function(){el.remove();},300);},duration);
+}
+
+// ── PASSWORD TOGGLE ──
+function togglePw(id,btn){
+  var inp=document.getElementById(id);
+  var show=inp.type==='password';
+  inp.type=show?'text':'password';
+  btn.style.color=show?'var(--accent)':'var(--muted)';
+}
+
+// ── AUTH ──
+function validateRegForm(){
+  var u=document.getElementById('reg-username').value.trim();
+  var p=document.getElementById('reg-password').value;
+  var c=document.getElementById('reg-confirm').value;
+  document.getElementById('reg-user-err').style.display=(u.length>0&&u.length<3)?'block':'none';
+  document.getElementById('reg-username').classList.toggle('error-input',u.length>0&&u.length<3);
+  document.getElementById('reg-pw-err').style.display=(p.length>0&&p.length<6)?'block':'none';
+  document.getElementById('reg-password').classList.toggle('error-input',p.length>0&&p.length<6);
+  document.getElementById('reg-match-err').style.display=(c.length>0&&p!==c)?'block':'none';
+  var str='';
+  if(p.length>0){
+    if(p.length<6)str='<span style="color:var(--fake)">Too short</span>';
+    else if(p.length<10)str='<span style="color:var(--warn)">Fair</span>';
+    else str='<span style="color:var(--real)">Strong</span>';
+  }
+  document.getElementById('reg-strength').innerHTML=str;
+  var ok=u.length>=3&&p.length>=6&&p===c;
+  document.getElementById('reg-btn').disabled=!ok;
+  document.getElementById('reg-btn').style.opacity=ok?'1':'0.55';
+}
+
+async function doRegister(){
+  var username=document.getElementById('reg-username').value.trim();
+  var email=document.getElementById('reg-email').value.trim();
+  var password=document.getElementById('reg-password').value;
+  var confirm=document.getElementById('reg-confirm').value;
+  if(!username||!password){toast('Fill in all required fields','error');return;}
+  if(password!==confirm){toast('Passwords do not match','error');return;}
+  var btn=document.getElementById('reg-btn');
+  btn.disabled=true;btn.textContent='Creating...';
+  try{
+    var r=await fetch(API + "/register", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+        username: username,
+        password: password
+    })
+    })
+    var d=await r.json();
+    if(d.success){toast('Account created! Please sign in.','success');showPage('page-login');}
+    else toast(d.message,'error');
+  }catch(e){toast('Server not reachable. Try again later.','error');}
+  finally{btn.disabled=false;btn.textContent='Create Account';}
+}
+
+async function doLogin(){
+  var username=document.getElementById('login-username').value.trim();
+  var password=document.getElementById('login-password').value;
+  if(!username||!password){toast('Enter username and password','error');return;}
+  var btn=document.getElementById('login-btn');
+  btn.disabled=true;btn.textContent='Signing in...';
+  try{
+    var r=await fetch(API + "/login", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+        "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+        username: username,
+        password: password
+    })
+    })
+    var d=await r.json();
+    if(d.success){
+      currentUser={username:d.username,email:d.email||''};
+      localStorage.setItem('tl_user',JSON.stringify(currentUser));
+      localStorage.setItem('tl_session_time',Date.now().toString());
+      toast('Welcome back, '+d.username+'!','success');
+      enterApp();
+    }else toast(d.message,'error');
+  }catch(e){toast('Server not reachable. Make sure Flask is running.','error');}
+  finally{btn.disabled=false;btn.textContent='Sign In';}
+}
+
+function doLogout(){document.getElementById('logoutModal').classList.add('open');}
+function confirmLogout(){
+  currentUser=null;
+  localStorage.removeItem('tl_user');
+  localStorage.removeItem('tl_session_time');
+  document.getElementById('logoutModal').classList.remove('open');
+  toast('Logged out','info');
+  showPage('page-landing');
+}
+
+// ── DELETE ACCOUNT ──
+function openDeleteAccountModal(){
+  document.getElementById('da-password').value='';
+  document.getElementById('deleteAccountModal').classList.add('open');
+}
+function closeDeleteAccountModal(){
+  document.getElementById('deleteAccountModal').classList.remove('open');
+}
+async function confirmDeleteAccount(){
+  var password=document.getElementById('da-password').value;
+  if(!password){toast('Enter your password to confirm','error');return;}
+  var btn=document.getElementById('da-confirm-btn');
+  btn.disabled=true;btn.textContent='Deleting...';
+  try{
+    var r=await fetch(API+'/delete-account',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password:password})
+    });
+    var d=await r.json();
+    if(d.success){
+      closeDeleteAccountModal();
+      currentUser=null;
+      localStorage.removeItem('tl_user');
+      localStorage.removeItem('tl_session_time');
+      toast('Your account has been deleted','info');
+      showPage('page-landing');
+    }else{
+      toast(d.message||'Could not delete account','error');
+    }
+  }catch(e){
+    toast('Server error. Try again later.','error');
+  }finally{
+    btn.disabled=false;btn.textContent='Delete My Account';
+  }
+}
+
+function enterApp(){
+  document.getElementById('nav-username').textContent=currentUser.username;
+  document.getElementById('nav-avatar').textContent=currentUser.username.slice(0,2).toUpperCase();
+  showPage('page-app');
+  loadStats();
+}
+
+// ── ANALYZER ──
+function setInputMode(mode,el){
+  inputMode=mode;
+  document.querySelectorAll('.mode-tab').forEach(function(t){t.classList.remove('active');});
+  el.classList.add('active');
+  document.getElementById('text-input-area').style.display=mode==='text'?'block':'none';
+  document.getElementById('url-input-area').style.display=mode==='url'?'block':'none';
+}
+
+function updateCharCount(){
+  var n=document.getElementById('analyze-text').value.length;
+  document.getElementById('char-count').textContent=n;
+  document.getElementById('char-warn').style.display=n>2000?'inline':'none';
+}
+
+function validateUrl(){
+  var val=document.getElementById('analyze-url').value.trim();
+  document.getElementById('url-clear-btn').style.display=val?'flex':'none';
+  var bad=val&&!/^https?:\/\/.+/.test(val);
+  document.getElementById('url-error').style.visibility=bad?'visible':'hidden';
+  document.getElementById('analyze-url').classList.toggle('error-input',!!bad);
+}
+
+function clearUrl(){
+  document.getElementById('analyze-url').value='';
+  document.getElementById('url-clear-btn').style.display='none';
+  document.getElementById('url-error').style.visibility='hidden';
+  document.getElementById('analyze-url').classList.remove('error-input');
+}
+
+function clearAnalyzer(){
+  document.getElementById('analyze-text').value='';
+  clearUrl();
+  document.getElementById('char-count').textContent='0';
+  document.getElementById('char-warn').style.display='none';
+  document.getElementById('result-area').innerHTML='';
+}
+
+function setAnalyzing(state){
+  isAnalyzing=state;
+  var btn=document.getElementById('analyze-btn');
+  btn.disabled=state;
+  if(state){
+    btn.innerHTML='<div class="spinner" style="width:15px;height:15px;border-width:2px;margin-right:6px"></div>Analyzing...';
+    document.getElementById('skeleton-loader').style.display='block';
+  }else{
+    btn.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="margin-right:6px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Analyze';
+    document.getElementById('skeleton-loader').style.display='none';
+  }
+}
+
+async function doAnalyze(e){
+  if(e)e.preventDefault();
+  if(!currentUser){toast('Please log in first','error');return;}
+  if(isAnalyzing)return;
+  var text=document.getElementById('analyze-text').value.trim();
+  var url=document.getElementById('analyze-url').value.trim();
+  if(inputMode==='text'&&text.length<10){toast('Enter at least 10 characters','error');return;}
+  if(inputMode==='url'){
+    if(!url){toast('Enter a URL to analyze','error');return;}
+    if(!/^https?:\/\/.+/.test(url)){toast('Enter a valid URL starting with https://','error');return;}
+  }
+  setAnalyzing(true);
+  try{
+    // FIX: previously this sent an empty {} body, so the backend always
+    // received text=None/url=None. Now we actually send what the user typed.
+    var body = inputMode==='text' ? {text:text} : {url:url};
+
+    var r = await fetch(API + '/analyze', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(body)
+    });
+    if(!r.ok){toast('Server error: '+r.status,'error');return;}
+    var d=await r.json();
+    console.log("BACKEND RESPONSE:", d);
+    if(!d.success){toast(d.message||'Analysis failed','error');return;}
+    lastResult=d;
+    renderResult(d,inputMode==='text'?text:'');
+    loadStats();
+    updateHistBadge(1);
+  }catch(err){
+    console.error('Analyze error:',err);
+    toast('Connection failed. Is Flask running on port 5000?','error');
+  }finally{
+    setAnalyzing(false);
+  }
+}
+
+function highlightText(text){
+  var fakeWords=['fake','hoax','rumor','unverified','clickbait','conspiracy','shocking','secret','exclusive','bombshell'];
+  var realWords=['according to','research','study','reported','official','confirmed','expert','published','announced'];
+  var out=text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  fakeWords.forEach(function(w){out=out.replace(new RegExp('\\b'+w+'\\b','gi'),function(m){return '<span class="fake-word">'+m+'</span>';});});
+  realWords.forEach(function(w){out=out.replace(new RegExp(w,'gi'),function(m){return '<span class="real-word">'+m+'</span>';});});
+  return out;
+}
+
+function renderResult(d,rawText){
+  var isReal=d.result==='Real News';
+  var cls=isReal?'real':'fake';
+  var lowConf=d.confidence<65;
+  var lowBanner=lowConf?'<div class="low-conf-banner">⚠️ Low confidence — model is uncertain. Verify independently.</div>':'';
+  var kwHtml=(d.keywords||[]).map(function(k){return '<span class="keyword" onclick="searchKeyword(\''+k+'\')">'+k+'</span>';}).join('');
+  var highlighted=rawText?'<div class="result-metric"><div class="rm-label">Highlighted Text</div><div class="highlighted-text">'+highlightText(rawText.substring(0,600))+(rawText.length>600?'…':'')+'</div></div>':'';
+  var html='<div class="result-card '+cls+(lowConf?' low-conf':'')+'">'+lowBanner+
+    '<div class="result-header">'+
+    '<div><div class="result-label '+cls+'">'+d.result+'</div>'+
+    '<div class="result-sub">'+(isReal?'Content appears credible based on language patterns':'Content shows signs of misinformation')+'</div></div>'+
+    '<div class="confidence-wrap">'+
+    '<div class="confidence-pct" style="color:'+(isReal?'var(--real)':'var(--fake)')+'">'+d.confidence+'%</div>'+
+    '<div class="confidence-text">Confidence</div>'+
+    '<div class="conf-bar"><div class="conf-bar-fill '+cls+'" id="confFill" style="width:0%"></div></div>'+
+    '</div></div>'+
+    '<div class="result-grid">'+
+    '<div class="result-metric"><div class="rm-label">Sentiment</div><div class="rm-value">'+d.sentiment+'</div></div>'+
+    '<div class="result-metric"><div class="rm-label">Explanation</div><div class="rm-value" style="font-size:13px;font-weight:400;color:var(--muted);line-height:1.5">'+d.explanation+'</div></div>'+
+    '<div class="result-metric" style="grid-column:1/-1"><div class="rm-label">Keywords — click to search history</div><div class="keywords-wrap">'+kwHtml+'</div></div>'+
+    '</div>'+highlighted+
+    '<div class="result-actions">'+
+    '<button type="button" class="btn btn-ghost btn-sm" onclick="copyResult()">📋 Copy Result</button>'+
+    '<button type="button" class="btn btn-ghost btn-sm" onclick="openShare()">📤 Share</button>'+
+    '<button type="button" class="btn btn-ghost btn-sm" onclick="switchTab(\'history\',document.getElementById(\'si-history\'))">📋 History</button>'+
+    '</div></div>';
+  document.getElementById('result-area').innerHTML=html;
+  setTimeout(function(){var el=document.getElementById('confFill');if(el)el.style.width=d.confidence+'%';},80);
+}
+
+function copyResult(){
+  if(!lastResult)return;
+  var text='TruthLens Analysis\nVerdict: '+lastResult.result+'\nConfidence: '+lastResult.confidence+'%\nSentiment: '+lastResult.sentiment+'\nKeywords: '+(lastResult.keywords||[]).join(', ');
+  navigator.clipboard.writeText(text).then(function(){toast('Result copied!','success');});
+}
+
+function searchKeyword(kw){
+  switchTab('history',document.getElementById('si-history'));
+  document.getElementById('history-search').value=kw;
+  filterHistory();
+}
+
+// ── VOICE ──
+function toggleVoice(){
+  if(!('webkitSpeechRecognition'in window||'SpeechRecognition'in window)){toast('Voice input not supported. Try Chrome.','error');return;}
+  if(isListening){stopVoice();return;}
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  recognition=new SR();
+  recognition.continuous=true;recognition.interimResults=true;recognition.lang='en-US';
+  recognition.onresult=function(e){
+    var final='';
+    for(var i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)final+=e.results[i][0].transcript;}
+    if(final){document.getElementById('analyze-text').value+=final+' ';updateCharCount();}
+  };
+  recognition.onend=function(){if(isListening)recognition.start();};
+  recognition.onerror=function(e){toast('Voice error: '+e.error,'error');stopVoice();};
+  recognition.start();isListening=true;
+  var btn=document.getElementById('voice-btn');
+  btn.classList.add('listening');
+  btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="margin-right:6px"><rect x="6" y="4" width="4" height="16" rx="2"/><rect x="14" y="4" width="4" height="16" rx="2"/></svg>Stop';
+  toast('Listening — speak now','info');
+}
+function stopVoice(){
+  if(recognition)recognition.stop();
+  isListening=false;
+  var btn=document.getElementById('voice-btn');
+  btn.classList.remove('listening');
+  btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="margin-right:6px"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>Voice Input';
+}
+
+// ── HISTORY ──
+async function loadHistory(){
+  try{
+    var search = document.getElementById('history-search').value.toLowerCase();
+
+    var r = await fetch(API+'/history', { credentials:'include' });
+    var data = await r.json();
+
+    // 🔥 FILTER LOGIC
+    historyData = data.filter(item => {
+        let matchSearch = !search || item.text.toLowerCase().includes(search);
+
+        let matchFilter =
+            currentFilter === 'all' ||
+            (currentFilter === 'real' && item.result === 'Real News') ||
+            (currentFilter === 'fake' && item.result === 'Fake News');
+
+        return matchSearch && matchFilter;
+    });
+
+    renderHistory(historyData);
+
+  } catch(e){
+    toast('Could not load history','error');
+  }
+}
+
+function filterHistory(){
+    loadHistory();
+}
+function setHistoryFilter(f,el){
+    currentFilter = f;
+
+    document.querySelectorAll('.ftab').forEach(tab => tab.classList.remove('active'));
+    el.classList.add('active');
+
+    loadHistory();
+}
+// ===== HISTORY STORAGE =====
+
+function renderHistory(items){
+  var el=document.getElementById('history-list');
+  if(!items.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><p>No results found.</p></div>';
+    document.getElementById('pagination').innerHTML='';
+    return;
+  }
+  var start=(histPage-1)*histPerPage;
+  var pageItems=items.slice(start,start+histPerPage);
+  el.innerHTML=pageItems.map(function(h){
+    var kwHtml=(h.keywords||[]).slice(0,5).map(function(k){return '<span class="hi-kw">'+k+'</span>';}).join('');
+    var safeText=h.text?(h.text.replace(/</g,'&lt;').substring(0,200)):'';
+    return '<div class="history-item">'+
+      '<div class="hi-header"><div class="hi-meta">'+
+      '<span class="hi-result '+(h.result==='Real News'?'real':'fake')+'">'+h.result+'</span>'+
+      '<span class="hi-conf">'+(h.confidence?Math.round(h.confidence*100)+'% conf':'')+'</span>'+
+      '<span class="hi-time">'+(h.timestamp||'')+'</span>'+
+      '</div><button type="button" class="btn btn-danger btn-sm" onclick="deleteHistoryItem('+h.id+')">✕</button></div>'+
+      '<div class="hi-text">'+safeText+'</div>'+
+      '<div class="hi-footer"><div class="hi-keywords">'+kwHtml+'</div>'+
+      '<span style="font-size:11px;color:var(--muted)">'+(h.sentiment||'')+'</span></div></div>';
+  }).join('');
+  renderPagination(items.length);
+}
+
+function renderPagination(total){
+  var pages=Math.ceil(total/histPerPage);
+  if(pages<=1){document.getElementById('pagination').innerHTML='';return;}
+  var html='';
+  if(histPage>1)html+='<button type="button" class="page-btn" onclick="goPage('+(histPage-1)+')">&#8249;</button>';
+  for(var i=1;i<=pages;i++){
+    if(i===1||i===pages||Math.abs(i-histPage)<=1)
+      html+='<button type="button" class="page-btn'+(i===histPage?' active':'')+'" onclick="goPage('+i+')">'+i+'</button>';
+    else if(Math.abs(i-histPage)===2)
+      html+='<span style="color:var(--muted);padding:0 4px">…</span>';
+  }
+  if(histPage<pages)html+='<button type="button" class="page-btn" onclick="goPage('+(histPage+1)+')">&#8250;</button>';
+  document.getElementById('pagination').innerHTML=html;
+}
+
+function goPage(p){histPage=p;renderHistory(historyData);}
+
+function updateHistBadge(add){
+  var cnt=historyData.length+add;
+  ['hist-badge','mob-hist-badge'].forEach(function(id){
+    var b=document.getElementById(id);
+    if(b){b.textContent=cnt;b.style.display=cnt>0?'inline':'none';}
+  });
+}
+
+async function deleteHistoryItem(id){
+  await fetch(API + '/delete_history/' + id, {
+    method: 'DELETE',
+    credentials: 'include'
+  });
+
+  toast('Item removed','info');
+  loadHistory();
+}
+
+async function clearHistory(){
+  if(!confirm('Clear all history? This cannot be undone.')) return;
+
+  // 🔥 Clear localStorage
+  localStorage.removeItem("history");
+
+  toast('History cleared','info');
+  loadHistory();
+}
+
+function exportHistory(){window.open(API+'/history/export/'+currentUser.username);}
+
+// ── STATS ──
+async function loadStats(){
+  if(!currentUser)return;
+  try{
+    var r=await fetch(API+'/stats',{
+    credentials:'include'
+    });
+    var d=await r.json();
+    document.getElementById('stat-total').textContent=d.total;
+    document.getElementById('stat-real').textContent=d.real;
+    document.getElementById('stat-fake').textContent=d.fake;
+    document.getElementById('p-total').textContent=d.total;
+    document.getElementById('p-real').textContent=d.real;
+    document.getElementById('p-fake').textContent=d.fake;
+    var pct=d.total>0?Math.round((d.real/d.total)*100):0;
+    document.getElementById('stat-bar').style.width=pct+'%';
+    if(d.total>0){
+      document.getElementById('acc-val').textContent=Math.round((d.fake/d.total)*100)+'%';
+      document.getElementById('accuracy-ring').style.display='flex';
+    }
+  }catch(e){}
+}
+
+// ── PROFILE ──
+function loadProfile(){
+  if(!currentUser)return;
+  document.getElementById('profile-avatar').textContent=currentUser.username.slice(0,2).toUpperCase();
+  document.getElementById('profile-name').textContent=currentUser.username;
+  document.getElementById('profile-email-display').textContent=currentUser.email||'No email set';
+  loadStats();
+}
+
+async function changePassword(){
+  var old=document.getElementById('cp-old').value;
+  var n=document.getElementById('cp-new').value;
+  var c=document.getElementById('cp-confirm').value;
+  if(!old||!n||!c){toast('Fill in all fields','error');return;}
+  if(n.length<6){toast('New password must be at least 6 characters','error');return;}
+  if(n!==c){toast('Passwords do not match','error');return;}
+  try{
+    var r=await fetch(API+'/change-password',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:currentUser.username,old_password:old,new_password:n})});
+    var d=await r.json();
+    if(d.success){toast('Password updated!','success');['cp-old','cp-new','cp-confirm'].forEach(function(id){document.getElementById(id).value='';});}
+    else toast(d.message,'error');
+  }catch(e){toast('Server error','error');}
+}
+
+// ── SHARE ──
+function openShare(){
+  if(!lastResult){toast('No result to share','error');return;}
+  var params=new URLSearchParams({r:lastResult.result,c:lastResult.confidence,s:lastResult.sentiment});
+  document.getElementById('shareLink').textContent=window.location.origin+'/?'+params.toString();
+  document.getElementById('shareModal').classList.add('open');
+}
+function closeShare(){document.getElementById('shareModal').classList.remove('open');}
+function copyShareLink(){
+  navigator.clipboard.writeText(document.getElementById('shareLink').textContent)
+    .then(function(){toast('Link copied!','success');closeShare();});
+}
+
+// ── SHARED RESULT ──
+(function(){
+  var p=new URLSearchParams(window.location.search);
+  if(p.get('r')){
+    setTimeout(function(){toast('Shared: '+p.get('r')+' — '+p.get('c')+'% confidence','info',6000);},600);
+  }
+})();
+
+// ── i18n ──
+var LANGS={
+  en:{tagline:'See through the noise',login:'Log in',getStarted:'Get Started',signIn:'Sign In',createAccount:'Create Account',welcomeBack:'Welcome Back',logout:'Log out',analyzer:'Analyzer',history:'History',profile:'Profile',about:'About',analyzeText:'Analyze Text',analysisHistory:'Analysis History',analyze:'Analyze',exportCsv:'Export CSV',clearAll:'Clear All',placeholder:'Paste your news article or any text here... (minimum 10 characters)',urlPlaceholder:'https://example.com/news-article',searchPlaceholder:'Search your history...'},
+  hi:{tagline:'शोर के पार देखें',login:'लॉग इन',getStarted:'शुरू करें',signIn:'साइन इन',createAccount:'खाता बनाएं',welcomeBack:'वापस स्वागत है',logout:'लॉग आउट',analyzer:'विश्लेषक',history:'इतिहास',profile:'प्रोफ़ाइल',about:'जानकारी',analyzeText:'पाठ विश्लेषण',analysisHistory:'विश्लेषण इतिहास',analyze:'विश्लेषण करें',exportCsv:'CSV निर्यात',clearAll:'सब साफ़ करें',placeholder:'यहाँ समाचार लेख पेस्ट करें...',urlPlaceholder:'https://example.com/article',searchPlaceholder:'इतिहास खोजें...'},
+  es:{tagline:'Ver a través del ruido',login:'Iniciar sesión',getStarted:'Comenzar',signIn:'Entrar',createAccount:'Crear cuenta',welcomeBack:'Bienvenido de nuevo',logout:'Cerrar sesión',analyzer:'Analizador',history:'Historial',profile:'Perfil',about:'Acerca de',analyzeText:'Analizar texto',analysisHistory:'Historial de análisis',analyze:'Analizar',exportCsv:'Exportar CSV',clearAll:'Borrar todo',placeholder:'Pega tu artículo aquí... (mínimo 10 caracteres)',urlPlaceholder:'https://ejemplo.com/articulo',searchPlaceholder:'Buscar historial...'},
+  fr:{tagline:'Voir à travers le bruit',login:'Connexion',getStarted:'Commencer',signIn:'Se connecter',createAccount:'Créer un compte',welcomeBack:'Bon retour',logout:'Déconnexion',analyzer:'Analyseur',history:'Historique',profile:'Profil',about:'À propos',analyzeText:'Analyser le texte',analysisHistory:"Historique d'analyse",analyze:'Analyser',exportCsv:'Exporter CSV',clearAll:'Tout effacer',placeholder:"Collez votre article ici... (minimum 10 caractères)",urlPlaceholder:'https://exemple.com/article',searchPlaceholder:"Rechercher l'historique..."},
+  de:{tagline:'Durch den Lärm sehen',login:'Anmelden',getStarted:'Loslegen',signIn:'Einloggen',createAccount:'Konto erstellen',welcomeBack:'Willkommen zurück',logout:'Abmelden',analyzer:'Analysator',history:'Verlauf',profile:'Profil',about:'Über uns',analyzeText:'Text analysieren',analysisHistory:'Analyseverlauf',analyze:'Analysieren',exportCsv:'CSV exportieren',clearAll:'Alles löschen',placeholder:'Artikel hier einfügen... (mindestens 10 Zeichen)',urlPlaceholder:'https://beispiel.com/artikel',searchPlaceholder:'Verlauf durchsuchen...'},
+  ar:{tagline:'انظر من خلال الضوضاء',login:'تسجيل الدخول',getStarted:'ابدأ الآن',signIn:'دخول',createAccount:'إنشاء حساب',welcomeBack:'مرحباً بعودتك',logout:'تسجيل الخروج',analyzer:'المحلل',history:'السجل',profile:'الملف الشخصي',about:'حول',analyzeText:'تحليل النص',analysisHistory:'سجل التحليل',analyze:'تحليل',exportCsv:'تصدير CSV',clearAll:'مسح الكل',placeholder:'الصق مقالتك هنا...',urlPlaceholder:'https://example.com/article',searchPlaceholder:'ابحث في السجل...'}
+};
+
+function tr(key){return(LANGS[currentLang]||LANGS.en)[key]||LANGS.en[key]||key;}
+
+function setLang(lang){
+  currentLang=lang;
+  localStorage.setItem('tl_lang',lang);
+  document.querySelectorAll('.lang-select').forEach(function(s){s.value=lang;});
+  document.documentElement.setAttribute('dir',lang==='ar'?'rtl':'ltr');
+  applyTranslations();
+  toast('Language changed','info',1500);
+}
+
+function applyTranslations(){
+  var T=LANGS[currentLang]||LANGS.en;
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    var k=el.getAttribute('data-i18n');
+    if(T[k])el.textContent=T[k];
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach(function(el){
+    var k=el.getAttribute('data-i18n-html');
+    if(T[k])el.innerHTML=T[k];
+  });
+  var ta=document.getElementById('analyze-text');if(ta)ta.placeholder=T.placeholder||'';
+  var ua=document.getElementById('analyze-url');if(ua)ua.placeholder=T.urlPlaceholder||'';
+  var hs=document.getElementById('history-search');if(hs)hs.placeholder=T.searchPlaceholder||'';
+}
+
+document.addEventListener('DOMContentLoaded',function(){
+  var lang=localStorage.getItem('tl_lang')||'en';
+  currentLang=lang;
+  document.querySelectorAll('.lang-select').forEach(function(s){s.value=lang;});
+  document.documentElement.setAttribute('dir',lang==='ar'?'rtl':'ltr');
+  applyTranslations();
+});
+</script>
+</body>
+</html>
