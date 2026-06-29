@@ -27,8 +27,28 @@ def home():
 
 
 # ------------------ LOAD MODEL ------------------
-model      = pickle.load(open(os.path.join(BASE_DIR, "model.pkl"),      "rb"))
-vectorizer = pickle.load(open(os.path.join(BASE_DIR, "vectorizer.pkl"), "rb"))
+import urllib.request
+
+# If model.pkl / vectorizer.pkl aren't in the repo (too large for normal git push),
+# download them from GitHub Release assets on first run. Replace the URLs below
+# with your own release asset download links (see deployment instructions).
+MODEL_URL = "https://github.com/MuthojuVyshnavi/FakeNews-Detector/releases/download/v1/model.pkl"
+VECTORIZER_URL = "https://github.com/MuthojuVyshnavi/FakeNews-Detector/releases/download/v1/vectorizer.pkl"
+
+def ensure_file(path, url):
+    if not os.path.exists(path):
+        print(f"⬇️  {os.path.basename(path)} not found locally, downloading from {url} ...")
+        urllib.request.urlretrieve(url, path)
+        print(f"✅ Downloaded {os.path.basename(path)}")
+
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
+VECTORIZER_PATH = os.path.join(BASE_DIR, "vectorizer.pkl")
+
+ensure_file(MODEL_PATH, MODEL_URL)
+ensure_file(VECTORIZER_PATH, VECTORIZER_URL)
+
+model      = pickle.load(open(MODEL_PATH,      "rb"))
+vectorizer = pickle.load(open(VECTORIZER_PATH, "rb"))
 print("✅ Model loaded successfully")
 print("✅ Vectorizer loaded successfully")
 print("🔍 Model type:", type(model).__name__)
